@@ -1,0 +1,252 @@
+const Alexa = require('ask-sdk-core');
+const AWS = require('aws-sdk');
+const IotData = new AWS.IotData({endpoint: '################.amazonaws.com'});
+
+function getShadowPromise(params) {
+    return new Promise((resolve, reject) => {
+        IotData.getThingShadow(params, (err, data) => {
+            if (err) {
+                console.log(err, err.stack);
+                reject('Failed to get thing shadow ${err.errorMessage}');
+            } else {
+                resolve(JSON.parse(data.payload));
+            }
+        });
+    });
+}
+
+let thingName;
+
+const obtenerParams = (thingName, desiredState) => {
+    return {
+        topic: `$aws/things/${thingName}/shadow/name/shadow_sistema_alarma/update`,
+        payload: `{"state": {"desired": ${desiredState}}}`,
+        qos: 0
+    };
+};
+
+let userList = require("./users.json");
+let user;
+
+const LaunchRequestHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
+    },
+    handle(handlerInput) {
+        const userId = Alexa.getUserId(handlerInput.requestEnvelope);
+        user = userList.users.find((user)=>user.id==userId);
+        
+        const speakOutput = `Sistema de Alarma Iniciado por ${user.name}`;
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+let alarm;
+
+const SeleccionarAlarmaIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'SeleccionarAlarmaIntent';
+    },
+    handle(handlerInput) {
+        const alarmSpoken = Alexa.getSlotValue(handlerInput.requestEnvelope, 'alarmaSlot');
+        var speakOutput="Alarma no encontrada";
+        if(alarmSpoken!==undefined)
+        {
+            alarm = user.alarms.find((alarm) => alarm.name === alarmSpoken);
+            thingName = alarm.thing;
+            speakOutput="La "+ alarm.name +" pertenece al objeto "+ alarm.thing;
+        }
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+const ShadowParams = (thingName) => {
+    thingName: `arn:aws:iot:us-east-2:462288001180:thing/${thingName}`
+};
+
+const QueryIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'QueryIntent';
+    },
+    async handle(handlerInput) {
+        var encendido = "unknown";
+        
+        await getShadowPromise(ShadowParams(thingName))
+          .then((result) => encendido = result.state.reported.encendido);
+        console.log(encendido);
+
+        var speakOutput = 'Error';
+        if (encendido == 'encendido') {
+            speakOutput = 'El sistema de alarma ha sido encendido';
+        } else if (encendido == 'apagado') {
+            speakOutput = 'El sistema de alarma ha sido apagado';
+        } else {
+            speakOutput = 'No se pudo consultar el estado del sistema de alarma, intentelo mas tarde';
+        }
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+  }
+};
+
+const encenderIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'EncenderSistemaAlarmaIntent';
+    },
+    handle(handlerInput) {
+        
+        const encenderParams = obtenerParams(thingName, '{"estadoEncendido": "encendido"}');
+
+        var speakOutput = 'Error';
+        IotData.publish(encenderParams, function(err, data) {
+            if (err) console.log(err);
+        });
+
+        speakOutput = 'Encendiendo Sistema de Alarma';
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+const apagarIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'ApagarSistemaAlarmaIntent';
+    },
+    handle(handlerInput) {
+
+        const apagarParams = obtenerParams(thingName, '{"estadoEncendido": "apagado"}');
+
+        var speakOutput = 'Error';
+        IotData.publish(apagarParams, function(err, data) {
+            if (err) console.log(err);
+        });
+
+        speakOutput = 'Apagando Sistema de Alarma';
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+const desactivarAlarmaIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'DesactivarAlarmaIntent';
+    },
+    handle(handlerInput) {
+
+        const desactivarAlarmaParams = obtenerParams(thingName, '{"estadoAlarma": "desactivada"}');
+
+        var speakOutput = 'Error';
+        IotData.publish(desactivarAlarmaParams, function(err, data) {
+            if (err) console.log(err);
+        });
+
+        speakOutput = 'Desactivando Alarma';
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+const HelpIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.HelpIntent';
+    },
+    handle(handlerInput) {
+        const speakOutput = 'Tienes las opciones de encender y apagar el sistema';
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+
+const CancelAndStopIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && (Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.CancelIntent'
+                || Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.StopIntent');
+    },
+    handle(handlerInput) {
+        const speakOutput = 'Adios!';
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .getResponse();
+    }
+};
+
+const FallbackIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.FallbackIntent';
+    },
+    handle(handlerInput) {
+        const speakOutput = 'Intenta de nuevo.';
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+const SessionEndedRequestHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'SessionEndedRequest';
+    },
+    handle(handlerInput) {
+        console.log(`~~~~ Session ended: ${JSON.stringify(handlerInput.requestEnvelope)}`);
+        return handlerInput.responseBuilder.getResponse();
+    }
+};
+
+const ErrorHandler = {
+    canHandle() {
+        return true;
+    },
+    handle(handlerInput, error) {
+        const speakOutput = 'Hubo un error. Intenta de nuevo.';
+        console.log(`~~~~ Error handled: ${JSON.stringify(error)}`);
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+exports.handler = Alexa.SkillBuilders.custom()
+    .addRequestHandlers(LaunchRequestHandler,
+                        QueryIntentHandler,
+                        encenderIntentHandler,
+                        SeleccionarAlarmaIntentHandler,
+                        apagarIntentHandler,
+                        desactivarAlarmaIntentHandler,
+                        HelpIntentHandler,
+                        CancelAndStopIntentHandler,
+                        FallbackIntentHandler,
+                        SessionEndedRequestHandler)
+    .addErrorHandlers(ErrorHandler)
+    .lambda();

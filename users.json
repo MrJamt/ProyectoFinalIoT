@@ -1,0 +1,28 @@
+{
+    "users": [
+        {
+            "id":"amzn1.ask.account.AMAS4MRFXX6NSCJLFJDW4JFAANXPVWMCDPVE6AHF6EJWXHQZOPCHFS2YFBRGBCKOAA7QTNBOYV2FOHPDTAYII2DERPCX62OV3EPM4QU4QM4DY5PWZLL3V7JUKH76TWLMQ364UJQEMIMKZVTLIUIG24QUWQBSNDV2YODCUB3UOEDEHMO6BMITEQYDWRI552XQ3QCRUQKQ2T4VCELRFNWA76I3FRMNTSDBSFITTQQ5RZTQ",
+            "name":"Adriel Mounzon",
+            "alarms":[
+                {
+                    "name": "alarma habitacion",
+                    "thing":"Mi_Objeto_IoT"
+                },
+                {
+                    "name": "alarma sala",
+                    "thing":"thingAlarmaSala"
+                }
+            ]
+        },
+        {
+            "id":"111222333",
+            "name":"Jorge Montanio",
+            "alarms":[
+                {
+                    "name": "alarma casa",
+                    "thing":"thingAlarmaCasa"
+                }
+            ]
+        }
+    ]
+}
