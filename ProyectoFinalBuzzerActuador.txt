@@ -1,0 +1,171 @@
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include <WiFiManager.h>
+
+const int pinBuzzer = 26;
+String alarmState = "unknown";
+bool first = true;
+const char *MQTT_BROKER = "ab8zecc8ttmh2-ats.iot.us-east-2.amazonaws.com";
+const char *MQTT_CLIENT_ID = "adriel.mounzon@ucb.edu.bo";
+const char *SUBSCRIBE_TOPIC_ALARM = "$aws/things/Mi_Objeto_IoT/shadow/name/shadow_sistema_alarma/update";
+const int MQTT_BROKER_PORT = 8883;
+
+const char AMAZON_ROOT_CA1[] PROGMEM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv
+b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj
+ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM
+9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw
+IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6
+VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L
+93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm
+jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA
+A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI
+U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs
+N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv
+o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU
+5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy
+rqXRfboQnoZsG4q5WTP468SQvvG5
+-----END CERTIFICATE-----
+)EOF";
+
+const char CERTIFICATE[] PROGMEM = R"KEY(
+-----BEGIN CERTIFICATE-----
+MIIDWjCCAkKgAwIBAgIVAOAvQ9u+UIv0TxOepB3QQcTYwwV1MA0GCSqGSIb3DQEB
+CwUAME0xSzBJBgNVBAsMQkFtYXpvbiBXZWIgU2VydmljZXMgTz1BbWF6b24uY29t
+IEluYy4gTD1TZWF0dGxlIFNUPVdhc2hpbmd0b24gQz1VUzAeFw0yMzEwMTcyMDM0
+MzBaFw00OTEyMzEyMzU5NTlaMB4xHDAaBgNVBAMME0FXUyBJb1QgQ2VydGlmaWNh
+dGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDJSv/icUGr1ld6PkND
+Dn0E2ciE7Z9CF3EW29ItpP9dsXlDssMbdhil3gFWuvwubJs68fkWKgVhMy+432wG
+INyzJW77Z8XWv09L87MFx1Fm8exuKN/7VwV/k4iyUXPtbAXM1L3H0hsdJU2NV9vv
+CbaB6Rx2mHrepCtgdbxbJYzd6vH4XtBp/P2OWFH8CXVYxWOyJOwmPSZ5JH/wbkzH
+rlDb/fI+2I/3H6IbCZk7Y9GR5LhrNTzR0R6OZGCgSPZj78HR7qQxXVgqnOECin6s
+zBILOBpBXKuPPuuMV3mUOA8XHq+9k0RA96qO69FuebA0RkRgwCdhXWFCOHUZSiaF
+GFAfAgMBAAGjYDBeMB8GA1UdIwQYMBaAFLq40EnsOneAosWcxkqNoLVF4GWeMB0G
+A1UdDgQWBBRXmgNJPCWuor8Exmbqk2VrisywMDAMBgNVHRMBAf8EAjAAMA4GA1Ud
+DwEB/wQEAwIHgDANBgkqhkiG9w0BAQsFAAOCAQEAse7lPcc5YCazr4Z3cRhOBdQ8
+QILtmdW45xRz2YveeB2cLvmQiaBcBsYeyV7fcmXyiWHcnr9Evv2PBLT5ZKg3jZNU
+LMXzHVCOCivGp8pZsVxBnFRLyjYAGMrZevkvRMz7dphGuF3qxgmt1NyuEr5kNbw9
++S9oklMgpAptIIz2d14Ke+AXf9WuJTAdq8LhscGcy3tHw4XNL9GJhpDozc+xQMs0
+FZIt7tJ35+jj/WJW+adL2lQZLZRTS9TGbDxcn7o9iavisqRU/zY4x8Fn5PsG/jqc
+Kvc8GNwdpw3gfrxmn5wuh6WU+k9h2e3+7aSCatyj5btQX4De/3U5qseQbfWqkg==
+-----END CERTIFICATE-----
+)KEY";
+
+const char PRIVATE_KEY[] PROGMEM = R"KEY(
+-----BEGIN RSA PRIVATE KEY-----
+MIIEogIBAAKCAQEAyUr/4nFBq9ZXej5DQw59BNnIhO2fQhdxFtvSLaT/XbF5Q7LD
+G3YYpd4BVrr8LmybOvH5FioFYTMvuN9sBiDcsyVu+2fF1r9PS/OzBcdRZvHsbijf
++1cFf5OIslFz7WwFzNS9x9IbHSVNjVfb7wm2gekcdph63qQrYHW8WyWM3erx+F7Q
+afz9jlhR/Al1WMVjsiTsJj0meSR/8G5Mx65Q2/3yPtiP9x+iGwmZO2PRkeS4azU8
+0dEejmRgoEj2Y+/B0e6kMV1YKpzhAop+rMwSCzgaQVyrjz7rjFd5lDgPFx6vvZNE
+QPeqjuvRbnmwNEZEYMAnYV1hQjh1GUomhRhQHwIDAQABAoIBAHvcqZ4mQNnDN+rh
+uzPdC3Lbq/aX3WKm2BDPzQIHQJffqBXPPx17yujttfcvchQDAnYABVztGIhaHeht
+mqQevo+B3kvW7DcbW2kKGUPaBS4KeYjDoCehwaFiIEBRvLsAuIT0956om8SQeqsZ
+wBzT5jkEP15+r0Sm0oY1jGSts4OtgjBWCHJdM9hb+7iQ1idjCYvZDs++F9CxVRdn
+HVzNHivatn+Yv5RzWTM0qVbdEriFuVt3505/u20ctoFdrG06nNwQlawIzGRkJxRq
+EdTD6aLajUCn1AVqHJCYqpcbqxtwDx7JPLiZLoBdu0WD8BL5GtsdSZxGeJbTiJY8
+C5OzFyECgYEA55Xsg7Cw04CWXyn1fZMwKeLyASS4mTA05A9tn3Qe3Lx3mjZII5sK
+IiG1vTwYxzPzaDdRM/z4tHCuGxpp6jlVKQgTNRWnSiV7UZ/LPnNVYxg+W+U/XdKG
+LbDfkTNDQKkIJrC839y6OdVg2wnmuHEf5KGjGsndTVpILymmpG/o2q8CgYEA3oOI
+CXgv7tQmT8DdYD27dfvY/i9QSM8sC1JSQ66J0RDfxHNlE8opGuVZ2ThDxkk+t2vx
+X5AiHDGuqAHFvsvdUjmbOyBEH2TDBwmcxdPlQ8trWT1TXb09yQtlJdyO/n2oq+iY
+CBDW13WCOtLovvqk1e8kbwwdTVd+NtQ+HG6jfZECgYBsCN++C3ZiJHGB0YQpYbmt
+QKbe66+GHxv9bEkagsRG+1DcSwhaO+B9TbaHofp5K34Ylv21wASRwKMoF6ljT/2v
+V4oGUKSrDVM7H81jw9AIm22z1v05mpVnyURyazSrfG9GBVsHH+RsSGOXq0XLs1JK
+iTEatSMdC8ny3n5T5bT+FwKBgDwCx06efnbv+oEp58qL+6HfUW+EPSfVz/AhvJQK
+X5rl7SOjZ5BFxn49etTtqsGwgVygnRGD4t8tuwgOqlFB1CfX53izxAufdkXQntpv
+wnZdR09jDbfLUP2GuDnU2S/jnfj3GwGZ4Qds5rmMpj7ThF86Rt44KzLvtNd+uF2c
+rTUxAoGANb9SkuCONTewAZD4XOANX4iYI1m2PPV2RZDHMljZAO4ZUpge7ulTy1AV
+20WVQGvcerxMWH3Yt3334OL6QXWB/0tOUmPZKnwZWgXm/015s8yNGKSM7ocZ0MBs
+76UsXht8oC+d+ixA+YW3Irfe30QBLvTj/38vgeCbhQ2X3NBifXQ=
+-----END RSA PRIVATE KEY-----
+)KEY";
+
+WiFiClientSecure wiFiClient;
+PubSubClient mqttClient(wiFiClient);
+StaticJsonDocument<JSON_OBJECT_SIZE(5)> inputDoc;
+StaticJsonDocument<JSON_OBJECT_SIZE(64)> outputDoc;
+char outputBuffer[128];
+
+void callback(const char *topic, byte *payload, unsigned int length) {
+  String message;
+  for (int i = 0; i < length; i++) message += String((char)payload[i]);
+  
+  if (String(topic) == SUBSCRIBE_TOPIC_ALARM) {
+    Serial.println("Message from topic " + String(topic) + ":" + message);
+
+    DeserializationError err = deserializeJson(inputDoc, payload);
+    if (!err) {
+      String tmpAlarmState = String(inputDoc["state"]["desired"]["estadoAlarma"].as<const char*>());
+      if (!tmpAlarmState.isEmpty() && !tmpAlarmState.equals(alarmState) && (tmpAlarmState.equals("activada") || tmpAlarmState.equals("desactivada")))
+        alarmState = tmpAlarmState;
+    }
+  }
+}
+
+boolean mqttClientConnect() {
+  Serial.print("Connecting to " + String(MQTT_BROKER));
+  if (mqttClient.connect(MQTT_CLIENT_ID)) {
+    Serial.println(" CONNECTED!");
+    mqttClient.subscribe(SUBSCRIBE_TOPIC_ALARM);
+    Serial.println("Subscribed to " + String(SUBSCRIBE_TOPIC_ALARM));
+  } else {
+    Serial.println("Can't connect to " + String(MQTT_BROKER));
+  }
+  return mqttClient.connected();
+}
+
+void publishAlarmState(String estado) {
+  outputDoc["state"]["desired"]["estadoAlarma"] = estado;
+  serializeJson(outputDoc, outputBuffer);
+  mqttClient.publish(SUBSCRIBE_TOPIC_ALARM, outputBuffer);
+}
+
+void setupWifi() {
+  WiFiManager wifiManager;
+  if (!wifiManager.autoConnect("BuzzerAlarm")) {
+    Serial.println("Timeout reached. Rebooting...");
+    delay(3000);
+    ESP.restart();
+    delay(5000);
+  }
+  Serial.println("CONNECTED!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void setup() {
+  Serial.begin(9600);
+  delay(100);
+  setupWifi();
+  wiFiClient.setCACert(AMAZON_ROOT_CA1);
+  wiFiClient.setCertificate(CERTIFICATE);
+  wiFiClient.setPrivateKey(PRIVATE_KEY);
+  mqttClient.setServer(MQTT_BROKER, MQTT_BROKER_PORT);
+  mqttClient.setCallback(callback);
+  pinMode(pinBuzzer, OUTPUT);
+}
+
+void loop() {
+  if (!mqttClient.connected()) mqttClientConnect();
+  else {
+    if (alarmState == "activada") {
+      analogWrite(pinBuzzer, 255);
+      delay(300);
+      analogWrite(pinBuzzer, 0);
+      delay(25);
+    } else if (first) {
+      alarmState = "desactivada";
+      publishAlarmState(alarmState);
+      first = false;
+    }
+    mqttClient.loop();
+  }
+  delay(1000);
+}
